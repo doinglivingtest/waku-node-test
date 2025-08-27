@@ -48,21 +48,6 @@ class TestInterNodeCommunication:
         """Test message transmission from one node to another"""
         node1_client = two_nodes['node1']['client']
         node2_client = two_nodes['node2']['client']
-        #
-        # # Wait for peer connection first
-        # def check_peer_connection():
-        #     try:
-        #         peers = node2_client.get_peers()
-        #         return len(peers) > 0
-        #     except Exception:
-        #         return False
-        #
-        # wait_for_condition(
-        #     condition_func=check_peer_connection,
-        #     timeout=settings.PEER_CONNECTION_TIMEOUT,
-        #     interval=5,
-        #     description="peer connection for message transmission"
-        # )
 
         with allure.step("Subscribe both nodes to topic"):
             success1 = node1_client.subscribe_to_topic([settings.DEFAULT_TOPIC])

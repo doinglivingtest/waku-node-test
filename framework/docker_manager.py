@@ -15,48 +15,6 @@ class DockerManager:
         self.client = docker.from_env()
         self.containers: List[Container] = []
         self.network: Optional[Network] = None
-        self._cleanup_existing_containers()
-
-    def _cleanup_existing_containers(self):
-        """Clean up any existing Waku containers and free up ports"""
-        try:
-            # Stop and remove containers with Waku-related names
-            waku_container_names = ['waku_node1', 'waku_node2', 'waku_node_single']
-
-            for container_name in waku_container_names:
-                try:
-                    existing_container = self.client.containers.get(container_name)
-                    logger.info(f"Found existing container: {container_name}")
-                    existing_container.stop(timeout=10)
-                    existing_container.remove()
-                    logger.info(f"Removed existing container: {container_name}")
-                except docker.errors.NotFound:
-                    pass  # Container doesn't exist, which is fine
-                except Exception as e:
-                    logger.warning(f"Failed to cleanup container {container_name}: {e}")
-
-            # Also cleanup any containers using our ports
-            all_containers = self.client.containers.list(all=True)
-            for container in all_containers:
-                if container.attrs.get('NetworkSettings', {}).get('Ports'):
-                    ports = container.attrs['NetworkSettings']['Ports']
-                    # Check if any of our test ports are being used
-                    test_ports = ['21161', '21162', '21163', '21164', '21165',
-                                  '21171', '21172', '21173', '21174', '21175']
-
-                    for port_key in ports.keys():
-                        port = port_key.split('/')[0]
-                        if port in test_ports:
-                            try:
-                                logger.info(f"Stopping container using test port {port}: {container.name}")
-                                container.stop(timeout=10)
-                                container.remove()
-                            except Exception as e:
-                                logger.warning(f"Failed to cleanup container using port {port}: {e}")
-                            break
-
-        except Exception as e:
-            logger.warning(f"Error during container cleanup: {e}")
 
     def _wait_for_ports_available(self, ports: Dict[str, int], max_attempts: int = 30):
         """Wait for ports to become available"""
@@ -184,8 +142,7 @@ class DockerManager:
                 name=node_name,
                 ports=port_mappings,
                 detach=True,
-                remove=True,
-                auto_remove=False
+                remove=False,
             )
 
             self.containers.append(container)
