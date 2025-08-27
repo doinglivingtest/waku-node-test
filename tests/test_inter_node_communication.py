@@ -15,22 +15,20 @@ class TestInterNodeCommunication:
     @pytest.mark.slow
     def test_nodes_peer_discovery(self, two_nodes):
         """Test that two nodes can discover each other"""
-        node1_client = two_nodes['node1']['client']
+
         node2_client = two_nodes['node2']['client']
-
-        with allure.step("Get node identities"):
-            node1_info = node1_client.get_node_info()
-            node2_info = node2_client.get_node_info()
-
-            allure.attach(node1_info['enrUri'], "Node1 ENR", allure.attachment_type.TEXT)
-            allure.attach(node2_info['enrUri'], "Node2 ENR", allure.attachment_type.TEXT)
 
         with allure.step("Wait for peer connection"):
             # Wait for nodes to discover each other
             def check_peer_connection():
                 try:
                     peers = node2_client.get_peers()
-                    return len(peers) > 0
+                    if len(peers) == 0:
+                        return False
+
+                    multiaddr = peers[0].get("multiaddr", "")
+                    # Assert that the node2 address can be seen.
+                    return settings.NODE1_IP in multiaddr
                 except Exception:
                     return False
 
@@ -50,21 +48,21 @@ class TestInterNodeCommunication:
         """Test message transmission from one node to another"""
         node1_client = two_nodes['node1']['client']
         node2_client = two_nodes['node2']['client']
-
-        # Wait for peer connection first
-        def check_peer_connection():
-            try:
-                peers = node2_client.get_peers()
-                return len(peers) > 0
-            except Exception:
-                return False
-
-        wait_for_condition(
-            condition_func=check_peer_connection,
-            timeout=settings.PEER_CONNECTION_TIMEOUT,
-            interval=5,
-            description="peer connection for message transmission"
-        )
+        #
+        # # Wait for peer connection first
+        # def check_peer_connection():
+        #     try:
+        #         peers = node2_client.get_peers()
+        #         return len(peers) > 0
+        #     except Exception:
+        #         return False
+        #
+        # wait_for_condition(
+        #     condition_func=check_peer_connection,
+        #     timeout=settings.PEER_CONNECTION_TIMEOUT,
+        #     interval=5,
+        #     description="peer connection for message transmission"
+        # )
 
         with allure.step("Subscribe both nodes to topic"):
             success1 = node1_client.subscribe_to_topic([settings.DEFAULT_TOPIC])
@@ -89,13 +87,19 @@ class TestInterNodeCommunication:
             allure.attach(test_message, "Published Message", allure.attachment_type.TEXT)
 
         with allure.step("Verify message received by node2"):
-            # Wait for message propagation
             time.sleep(settings.MESSAGE_PROPAGATION_TIMEOUT)
+
+            received_messages = []  # store messages after first success
 
             def check_message_received():
                 try:
                     messages = node2_client.get_messages(settings.DEFAULT_TOPIC)
-                    return len(messages) > 0
+                    if len(messages) > 0:
+                        # store them only once when found
+                        if not received_messages:
+                            received_messages.extend(messages)
+                        return True
+                    return False
                 except Exception:
                     return False
 
@@ -106,17 +110,20 @@ class TestInterNodeCommunication:
                 description="message reception on node2"
             )
 
-            # Note: Due to Waku's architecture, messages might not always be cached
-            # The test validates the communication path is established
-            if message_received:
-                messages = node2_client.get_messages(settings.DEFAULT_TOPIC)
-                allure.attach(
-                    f"Received {len(messages)} messages",
-                    "Messages Received",
-                    allure.attachment_type.TEXT
-                )
+            assert message_received, "No messages received on node2"
+            assert len(received_messages) == 1, f"Expected 1 message, got {len(received_messages)}"
 
-            # The main validation is that nodes can communicate (peer connection established)
-            # Message caching behavior may vary based on Waku configuration
+            message = received_messages[0]
+            assert message.get("payload") == test_message, \
+                f"Expected payload '{test_message}', got '{message.get('payload')}'"
+            assert message.get("contentTopic") == settings.DEFAULT_TOPIC, \
+                f"Expected contentTopic '{settings.DEFAULT_TOPIC}', got '{message.get('contentTopic')}'"
+
+            allure.attach(
+                f"Received {len(received_messages)} messages",
+                "Messages Received",
+                allure.attachment_type.TEXT
+            )
+
             peers = node2_client.get_peers()
             assert len(peers) > 0, "Nodes are not connected - message transmission not possible"

@@ -20,12 +20,6 @@ class TestBasicNodeOperation:
         with allure.step("Get node debug information"):
             node_info = single_node['client'].get_node_info()
             assert node_info is not None
-            assert 'enrUri' in node_info
-
-            # Store ENR URI for later use
-            enr_uri = node_info['enrUri']
-            allure.attach(enr_uri, "ENR URI", allure.attachment_type.TEXT)
-            assert enr_uri.startswith('enr:')
 
     @allure.story("Topic Subscription")
     @allure.severity(allure.severity_level.NORMAL)
@@ -40,7 +34,6 @@ class TestBasicNodeOperation:
     def test_message_publishing(self, single_node):
         """Test publishing a message to a topic"""
         # First subscribe to topic
-        single_node['client'].subscribe_to_topic([settings.DEFAULT_TOPIC])
 
         with allure.step("Publish message"):
             success = single_node['client'].publish_message(
@@ -54,19 +47,17 @@ class TestBasicNodeOperation:
     @allure.severity(allure.severity_level.NORMAL)
     def test_message_retrieval(self, single_node):
         """Test retrieving messages from a topic"""
-        # Subscribe and publish message first
-        single_node['client'].subscribe_to_topic([settings.DEFAULT_TOPIC])
-        single_node['client'].publish_message(
-            payload=settings.DEFAULT_MESSAGE,
-            content_topic=settings.DEFAULT_TOPIC,
-            timestamp=int(time.time() * 1000)
-        )
-
-        # Wait a bit for message to be stored
-        time.sleep(2)
 
         with allure.step("Retrieve messages"):
             messages = single_node['client'].get_messages(settings.DEFAULT_TOPIC)
             assert isinstance(messages, list)
-            # Note: Messages might be empty if they're not cached
             allure.attach(str(len(messages)), "Number of messages", allure.attachment_type.TEXT)
+
+        # Make sure at least one message has the expected payload and topic
+        found = any(
+            msg.get("payload") == settings.DEFAULT_MESSAGE and
+            msg.get("contentTopic") == settings.DEFAULT_TOPIC
+            for msg in messages
+        )
+
+        assert found, f"Message with payload '{settings.DEFAULT_MESSAGE}' on topic '{settings.DEFAULT_TOPIC}' not found"

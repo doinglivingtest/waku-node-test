@@ -67,7 +67,6 @@ class WakuClient:
         """Retrieve messages for a topic"""
         encoded_topic = quote(content_topic, safe='')
         url = f"{self.base_url}{settings.MESSAGES_ENDPOINT}/{encoded_topic}"
-
         response = self.session.get(url)
         response.raise_for_status()
         return response.json()
